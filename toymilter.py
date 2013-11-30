@@ -5,6 +5,7 @@ import time
 import email
 import sys
 from socket import AF_INET, AF_INET6
+import StringIO
 from Milter.utils import parse_addr
 
 from multiprocessing import Process, Queue
@@ -39,7 +40,7 @@ class myMilter(Milter.Base):
         self.receiver = self.getsymval('j')
         self.log("connect from %s at %s" % (IPname, hostaddr))
 
-    return Milter.CONTINUE
+        return Milter.CONTINUE
 
     ##  def envfrom(self,f,*str):
     def envfrom(self, mailfrom, *str):
@@ -60,7 +61,7 @@ class myMilter(Milter.Base):
         self.log(str(rcptinfo))
         self.R.append(rcptinfo)
 
-    return Milter.CONTINUE
+        return Milter.CONTINUE
 
     @Milter.noreply
     def header(self, name, hval):
@@ -82,7 +83,7 @@ class myMilter(Milter.Base):
         msg = email.message_from_file(self.fp)
         # many milter functions can only be called from eom()
         # example of adding a Bcc:
-        self.addrcpt('<%s>' % 'spy@example.com')
+        #self.addrcpt('<%s>' % 'spy@example.com')
         return Milter.ACCEPT
 
     def close(self):
@@ -116,7 +117,7 @@ def background():
 def main():
     bt = Process(target=background)
     bt.start()
-    socketname = "/var/spool/gnupg-milter/milter.socket"
+    socketname = "unix:/var/spool/postfix/var/spool/gnupg-milter/milter.socket"
     timeout = 600
     # Register to have the Milter factory create instances of your class:
     Milter.factory = myMilter
