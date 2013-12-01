@@ -6,7 +6,7 @@ import email
 import sys
 from socket import AF_INET, AF_INET6
 import StringIO
-from Milter.utils import parse_addr
+from Milter.utils import parseaddr
 
 # imports for this module
 from gpgmilter import config
@@ -19,6 +19,7 @@ logq = Queue(maxsize=4)
 class GnupgMilter(Milter.Base):
 
     _pk = None
+    _me = "gnupg-milter"
 
     def __init__(self):  # A new instance with each new connection.
         self.id = Milter.uniqueID()  # Integer incremented with each call.
@@ -42,7 +43,7 @@ class GnupgMilter(Milter.Base):
         self.IPname = IPname  # Name from a reverse IP lookup
         self.H = None
         self.fp = None
-        self.body = None
+        self.gpgm_body = None
         self.receiver = self.getsymval('j')
         self.log("connect from %s at %s" % (IPname, hostaddr))
 
@@ -56,9 +57,7 @@ class GnupgMilter(Milter.Base):
         self.user = self.getsymval('{auth_authen}')  # authenticated user
         self.log("mail from:", mailfrom, *str)
         self.fp = StringIO.StringIO()
-        self.body = StringIO.StringIO()
-        self.canon_from = '@'.join(parse_addr(mailfrom))
-        self.fp.write('From %s %s\n' % (self.canon_from, time.ctime()))
+        self.gpgm_body = StringIO.StringIO()
         return Milter.CONTINUE
 
     ##  def envrcpt(self, to, *str):
@@ -67,10 +66,13 @@ class GnupgMilter(Milter.Base):
         rcptinfo = to, Milter.dictfromlist(s)
         self.log(str(rcptinfo))
         self.R.append(rcptinfo)
+        toName, toAddr = parseaddr(to)
 
-        self._pk = self.config.get_public_key()
+        self._pk = config.cfg.get_public_key(toAddr)
         if self._pk is not None:
-            self.log("Have private key:\n{}".format(pk))
+            self.log("Have private key for {}:\n{}".format(toAddr, self._pk))
+        else:
+            self.log("No private key for {}.".format(toAddr))
 
         return Milter.CONTINUE
 
@@ -88,12 +90,13 @@ class GnupgMilter(Milter.Base):
     @Milter.noreply
     def body(self, chunk):
         self.fp.write(chunk)
-        self.body.write(chunk)
+        self.gpgm_body.write(chunk)
         return Milter.CONTINUE
 
     def eom(self):
+        self.addheader("X-encrypted-by", self._me)
         self.fp.seek(0)
-        self.body.seek(0)
+        self.gpgm_body.seek(0)
         self.log("The whole message:\n{}".format(self.fp.read()))
         return Milter.ACCEPT
 
@@ -129,7 +132,7 @@ def main():
     
     # read configuration
     cfgfile = "/etc/gnupg-milter.conf"
-    cfg = config.get_config(cfgfile)
+    config.init_config(cfgfile)
 
     # run log daemon
     bt = Process(target=background)
@@ -143,7 +146,7 @@ def main():
     Milter.set_flags(flags)       # tell Sendmail which features we use
     print("%s gnupg-milter startup" % time.strftime('%Y-%m-%d %H:%M:%S'))
     sys.stdout.flush()
-    Milter.runmilter("gnupg-milter", cfg.socket, cfg.timeout)
+    Milter.runmilter("gnupg-milter", config.cfg.socket, config.cfg.timeout)
 
     # wait for logging daemon to exit
     logq.put(None)

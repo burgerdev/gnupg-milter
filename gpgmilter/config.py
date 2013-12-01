@@ -1,14 +1,15 @@
 
 _KEY = """
-
+PGPGPGPGPGPGPGPGPGPGPGPGPGP
 """
 
-def get_config(cfgfile):
+
+def init_config(cfgfile):
     '''
     read the configuration file and return a Config object
     '''
     #TODO read real config file
-    return Config()
+    return
 
 
 class Config(object):
@@ -43,3 +44,4 @@ class Config(object):
             return None
 
 
+cfg = Config()
