@@ -3,15 +3,6 @@ _KEY = """
 PGPGPGPGPGPGPGPGPGPGPGPGPGP
 """
 
-
-def init_config(cfgfile):
-    '''
-    read the configuration file and return a Config object
-    '''
-    #TODO read real config file
-    return
-
-
 class Config(object):
     '''
     A configuration for the gnupg-milter.
@@ -31,7 +22,17 @@ class Config(object):
     #FIXME bogus
     _keys = {'webmaster@burgerdev.de': _KEY}
 
-    def get_public_key(self, addr):
+
+    @classmethod
+    def init_config(cls, filename):
+        '''
+        read the configuration file and return a Config object
+        '''
+        #TODO read real config file
+        return
+
+    @classmethod
+    def get_public_key(cls, addr):
         '''
         Get the public key for this email address. 
         Returns either a str with the key, or None.
@@ -43,5 +44,3 @@ class Config(object):
         else:
             return None
 
-
-cfg = Config()

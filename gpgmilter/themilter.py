@@ -9,7 +9,7 @@ import StringIO
 from Milter.utils import parseaddr
 
 # imports for this module
-from gpgmilter import config
+from gpgmilter import Config as config
 
 from multiprocessing import Process, Queue
 
@@ -114,44 +114,16 @@ class GnupgMilter(Milter.Base):
     def log(self, *msg):
         logq.put((msg, self.id, time.time()))
 
+    @staticmethod
+    def background():
+        while True:
+            t = logq.get()
+            if not t:
+                break
+            msg, id, ts = t
+            print("%s [%d]" % (time.strftime('%Y%b%d %H:%M:%S',
+                                             time.localtime(ts)), id))
+            for i in msg:
+                print(i)
+            print("")
 
-def background():
-    while True:
-        t = logq.get()
-        if not t:
-            break
-        msg, id, ts = t
-        print("%s [%d]" % (time.strftime('%Y%b%d %H:%M:%S',
-                                         time.localtime(ts)), id))
-        for i in msg:
-            print(i)
-        print("")
-
-
-def main():
-    
-    # read configuration
-    cfgfile = "/etc/gnupg-milter.conf"
-    config.init_config(cfgfile)
-
-    # run log daemon
-    bt = Process(target=background)
-    bt.start()
-
-    # Register to have the Milter factory create instances of your class:
-    Milter.factory = GnupgMilter
-    flags = Milter.CHGBODY + Milter.CHGHDRS + Milter.ADDHDRS
-    flags += Milter.ADDRCPT
-    flags += Milter.DELRCPT
-    Milter.set_flags(flags)       # tell Sendmail which features we use
-    print("%s gnupg-milter startup" % time.strftime('%Y-%m-%d %H:%M:%S'))
-    sys.stdout.flush()
-    Milter.runmilter("gnupg-milter", config.cfg.socket, config.cfg.timeout)
-
-    # wait for logging daemon to exit
-    logq.put(None)
-    bt.join()
-    print("%s gnupg-milter shutdown" % time.strftime('%Y-%m-%d %H:%M:%S'))
-
-if __name__ == "__main__":
-    main()
