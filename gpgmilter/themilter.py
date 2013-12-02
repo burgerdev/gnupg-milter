@@ -1,6 +1,5 @@
 
 # python standard modules
-import syslog
 import StringIO
 
 # python-milter modules
@@ -9,7 +8,6 @@ from Milter.utils import parseaddr
 
 # imports for this module
 from gpgmilter import Config as config
-
 
 class GnupgMilter(Milter.Base):
 
@@ -30,7 +28,7 @@ class GnupgMilter(Milter.Base):
             ..., family=AF_INET6, hostaddr=('3ffe:80e8:d8::1', 4720, 1, 0)
         '''
         self.gpgm_body = None
-        self.log("connect from %s at %s" % (IPname, hostaddr))
+        config.log("connect from %s at %s" % (IPname, hostaddr))
         return Milter.CONTINUE
 
     def envfrom(self, mailfrom, *s):
@@ -41,9 +39,9 @@ class GnupgMilter(Milter.Base):
         toName, toAddr = parseaddr(to)
         self.gpgm_pk = self.gpgm_get_public_key_fingerprint(toAddr)
         if self.gpgm_pk is not None:
-            self.log("Have private key for {}:\n{}".format(toAddr, self.gpgm_pk))
+            config.log("Have private key for {}:\n{}".format(toAddr, self.gpgm_pk))
         else:
-            self.log("No private key for {}.".format(toAddr))
+            config.log("No private key for {}.".format(toAddr))
         return Milter.CONTINUE
 
     @Milter.noreply
@@ -67,11 +65,11 @@ class GnupgMilter(Milter.Base):
         else:
             self.addheader("X-parsed-by", self.gpgm_me)
         self.gpgm_body.seek(0)
-        self.log("The whole message:\n{}".format(self.fp.read()))
+        config.log("The whole message:\n{}".format(self.fp.read()))
         if self.gpgm_pk:
-            self.log("Crypted body:\n{]".format(self.gpgm_encrypt()))
+            config.log("Crypted body:\n{]".format(self.gpgm_encrypt()))
         else:
-            self.log("Not encrypting...")
+            config.log("Not encrypting...")
         #TODO update body
         return Milter.ACCEPT
 
@@ -83,13 +81,10 @@ class GnupgMilter(Milter.Base):
         # client disconnected prematurely
         return Milter.CONTINUE
 
-  ## === Support Functions ===
-
-    def log(self, *msg):
-        logq.put((msg, self.id, time.time()))
+    ## === Support Functions ===
 
     @staticmethod
-    def canonical_email_address(addr):
+    def gpgm_canonical_email_address(addr):
         return addr.strip().lower()
 
     @classmethod
@@ -98,8 +93,8 @@ class GnupgMilter(Milter.Base):
             for k in cls.gpgm_gpg.list_keys():
                 for uid in k['uids']:
                     name, caddr = parseaddr(uid)
-                    if cls.canonical_email_address(caddr) ==\
-                            cls.canonical_email_address(addr):
+                    if cls.gpgm_canonical_email_address(caddr) ==\
+                            cls.gpgm_canonical_email_address(addr):
                         print("Found fingerprint")
                         return k['fingerprint']
             return ""
@@ -113,17 +108,4 @@ class GnupgMilter(Milter.Base):
         enc = cls.gpgm_gpg.encrypt(data, fingerprint)
         assert len(enc)>0, "Encryption failed."
         return enc
-
-    @staticmethod
-    def background():
-        while True:
-            t = logq.get()
-            if not t:
-                break
-            msg, id, ts = t
-            print("%s [%d]" % (time.strftime('%Y%b%d %H:%M:%S',
-                                             time.localtime(ts)), id))
-            for i in msg:
-                print(i)
-            print("")
 

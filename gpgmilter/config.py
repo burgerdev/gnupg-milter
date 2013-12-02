@@ -1,7 +1,11 @@
 
-_KEY = """
-PGPGPGPGPGPGPGPGPGPGPGPGPGP
-"""
+import logging
+
+logger = logging.getLogger("gnupg-milter")
+logging.basicConfig()
+
+loglevel = {'DEBUG': logging.DEBUG, 'INFO': logging.INFO,
+            'WARN': logging.WARN, 'ERROR': logging.ERROR}
 
 class Config(object):
     '''
@@ -31,4 +35,9 @@ class Config(object):
         '''
         #TODO read real config file
         return
+    @staticmethod
+    def log(msg, level='INFO'):
+        #TODO implement syslog
+        assert level in loglevel, "Invalid logging level"
+        logger.log(loglevel[level], msg)
 
