@@ -19,9 +19,10 @@ class Config(object):
     #FIXME is that so?
     timeout = 600
 
-    #FIXME bogus
-    _keys = {'webmaster@burgerdev.de': _KEY}
-
+    # GPG home directory (where the key rings roam)
+    #FIXME don't use temp!!!
+    gnupghome = "/tmp/gpg"
+    
 
     @classmethod
     def init_config(cls, filename):
@@ -30,17 +31,4 @@ class Config(object):
         '''
         #TODO read real config file
         return
-
-    @classmethod
-    def get_public_key(cls, addr):
-        '''
-        Get the public key for this email address. 
-        Returns either a str with the key, or None.
-        '''
-
-        #FIXME bogus implementation
-        if addr in self._keys:
-            return self._keys[addr]
-        else:
-            return None
 

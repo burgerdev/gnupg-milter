@@ -1,108 +1,82 @@
-#!/usr/bin/env python
 
-import Milter
-import time
-import email
-import sys
-from socket import AF_INET, AF_INET6
+# python standard modules
+import syslog
 import StringIO
+
+# python-milter modules
+import Milter
 from Milter.utils import parseaddr
 
 # imports for this module
 from gpgmilter import Config as config
 
-from multiprocessing import Process, Queue
-
-logq = Queue(maxsize=4)
-
 
 class GnupgMilter(Milter.Base):
 
-    _pk = None
-    _me = "gnupg-milter"
+    gpgm_pk = None
+    gpgm_me = "gnupg-milter"
+
 
     def __init__(self):  # A new instance with each new connection.
         self.id = Milter.uniqueID()  # Integer incremented with each call.
 
-    # each connection runs in its own thread and has its own myMilter
-    # instance.  Python code must be thread safe.  This is trivial if only
-    # stuff in myMilter instances is referenced.
     @Milter.noreply
     def connect(self, IPname, family, hostaddr):
-    # (self, 'ip068.subnet71.example.com', AF_INET, ('215.183.71.68', 4720) )
-    # (self, 'ip6.mxout.example.com', AF_INET6,
-    #   ('3ffe:80e8:d8::1', 4720, 1, 0) )
-        self.IP = hostaddr[0]
-        self.port = hostaddr[1]
-        if family == AF_INET6:
-            self.flow = hostaddr[2]
-            self.scope = hostaddr[3]
-        else:
-            self.flow = None
-            self.scope = None
-        self.IPname = IPname  # Name from a reverse IP lookup
-        self.H = None
-        self.fp = None
+        '''
+        incoming connection
+
+        example parameters:
+            IPname='mx.example.com', family=AF_INET, hostaddr=('23.5.4.3',4720)
+            ..., family=AF_INET6, hostaddr=('3ffe:80e8:d8::1', 4720, 1, 0)
+        '''
         self.gpgm_body = None
-        self.receiver = self.getsymval('j')
         self.log("connect from %s at %s" % (IPname, hostaddr))
-
         return Milter.CONTINUE
 
-    ##  def envfrom(self,f,*str):
-    def envfrom(self, mailfrom, *str):
-        self.F = mailfrom
-        self.R = []  # list of recipients
-        self.fromparms = Milter.dictfromlist(str)   # ESMTP parms
-        self.user = self.getsymval('{auth_authen}')  # authenticated user
-        self.log("mail from:", mailfrom, *str)
-        self.fp = StringIO.StringIO()
-        self.gpgm_body = StringIO.StringIO()
+    def envfrom(self, mailfrom, *s):
         return Milter.CONTINUE
 
-    ##  def envrcpt(self, to, *str):
     @Milter.noreply
     def envrcpt(self, to, *s):
-        rcptinfo = to, Milter.dictfromlist(s)
-        self.log(str(rcptinfo))
-        self.R.append(rcptinfo)
         toName, toAddr = parseaddr(to)
-
-        self._pk = config.cfg.get_public_key(toAddr)
-        if self._pk is not None:
-            self.log("Have private key for {}:\n{}".format(toAddr, self._pk))
+        self.gpgm_pk = self.gpgm_get_public_key_fingerprint(toAddr)
+        if self.gpgm_pk is not None:
+            self.log("Have private key for {}:\n{}".format(toAddr, self.gpgm_pk))
         else:
             self.log("No private key for {}.".format(toAddr))
-
         return Milter.CONTINUE
 
     @Milter.noreply
     def header(self, name, hval):
-        self.fp.write("%s: %s\n" % (name, hval))
-        #TODO check if already encrypted
         return Milter.CONTINUE
 
     @Milter.noreply
     def eoh(self):
-        self.fp.write("\n")
+        self.gpgm_body = StringIO.StringIO()
         return Milter.CONTINUE
 
     @Milter.noreply
     def body(self, chunk):
-        self.fp.write(chunk)
+        #TODO check if already encrypted
         self.gpgm_body.write(chunk)
         return Milter.CONTINUE
 
     def eom(self):
-        self.addheader("X-encrypted-by", self._me)
-        self.fp.seek(0)
+        if self.gpgm_pk:
+            self.addheader("X-encrypted-by", self.gpgm_me)
+        else:
+            self.addheader("X-parsed-by", self.gpgm_me)
         self.gpgm_body.seek(0)
         self.log("The whole message:\n{}".format(self.fp.read()))
+        if self.gpgm_pk:
+            self.log("Crypted body:\n{]".format(self.gpgm_encrypt()))
+        else:
+            self.log("Not encrypting...")
+        #TODO update body
         return Milter.ACCEPT
 
     def close(self):
-        # always called, even when abort is called.  Clean up
-        # any external resources here.
+        self.body.close()
         return Milter.CONTINUE
 
     def abort(self):
@@ -113,6 +87,32 @@ class GnupgMilter(Milter.Base):
 
     def log(self, *msg):
         logq.put((msg, self.id, time.time()))
+
+    @staticmethod
+    def canonical_email_address(addr):
+        return addr.strip().lower()
+
+    @classmethod
+    def gpgm_get_public_key_fingerprint(cls, addr):
+        def findKey(gpg, addr):
+            for k in cls.gpgm_gpg.list_keys():
+                for uid in k['uids']:
+                    name, caddr = parseaddr(uid)
+                    if cls.canonical_email_address(caddr) ==\
+                            cls.canonical_email_address(addr):
+                        print("Found fingerprint")
+                        return k['fingerprint']
+            return ""
+    
+    @classmethod
+    def gpgm_encrypt(cls, data, fingerprint):
+        assert isinstance(data, str), "Only strings can be encrypted."
+        if len(str) == 0:
+            return ""
+        
+        enc = cls.gpgm_gpg.encrypt(data, fingerprint)
+        assert len(enc)>0, "Encryption failed."
+        return enc
 
     @staticmethod
     def background():

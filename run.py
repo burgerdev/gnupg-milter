@@ -1,12 +1,14 @@
 #!/usr/bin/env python
 
 from gpgmilter import GnupgMilter, Config as config
+import Milter
 
 def main():
 
     # read configuration
     cfgfile = "/etc/gnupg-milter.conf"
     config.init_config(cfgfile)
+    GnupgMilter.gpgm_gpg = Milter.GPG(gnupghome=config.gnupghome)
 
     # run log daemon
     bt = Process(target=GnupgMilter.background)
