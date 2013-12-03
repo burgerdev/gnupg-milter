@@ -1,0 +1,8 @@
+- implement config file parsing
+- logging
+- message body scan
+- setup.py
+- test config
+- actual code in themilter
+
+

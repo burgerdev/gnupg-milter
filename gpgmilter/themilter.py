@@ -1,22 +1,36 @@
 
 # python standard modules
 import StringIO
+import functools
 
 # python-milter modules
 import Milter
 from Milter.utils import parseaddr
 
-# imports for this module
-from gpgmilter import Config as config
+# python-gnupg modules
+import gnupg
+
+# gnupg-milter modules
+import config
 
 class GnupgMilter(Milter.Base):
 
     gpgm_pk = None
     gpgm_me = "gnupg-milter"
 
+    # GPG instance
+    gpgm_gpg = None
 
-    def __init__(self):  # A new instance with each new connection.
-        self.id = Milter.uniqueID()  # Integer incremented with each call.
+    def __init__(self, conf=None):  # A new instance with each new connection.
+        self.id = Milter.uniqueID()
+        if conf is not None:
+            assert isinstance(conf, config.Config)
+            self.conf = conf
+        else:
+            self.conf = config.Config()
+        self.gpgm_gpg = gnupg.GPG(gnupghome=self.conf.gnupghome)
+
+    ## === Milter Functions ===
 
     @Milter.noreply
     def connect(self, IPname, family, hostaddr):
@@ -39,9 +53,9 @@ class GnupgMilter(Milter.Base):
         toName, toAddr = parseaddr(to)
         self.gpgm_pk = self.gpgm_get_public_key_fingerprint(toAddr)
         if self.gpgm_pk is not None:
-            config.log("Have private key for {}:\n{}".format(toAddr, self.gpgm_pk))
+            self.conf.log("Have private key for {}:\n{}".format(toAddr, self.gpgm_pk))
         else:
-            config.log("No private key for {}.".format(toAddr))
+            self.conf.log("No private key for {}.".format(toAddr))
         return Milter.CONTINUE
 
     @Milter.noreply
@@ -65,11 +79,11 @@ class GnupgMilter(Milter.Base):
         else:
             self.addheader("X-parsed-by", self.gpgm_me)
         self.gpgm_body.seek(0)
-        config.log("The whole message:\n{}".format(self.fp.read()))
+        self.conf.log("The whole message:\n{}".format(self.fp.read()))
         if self.gpgm_pk:
-            config.log("Crypted body:\n{]".format(self.gpgm_encrypt()))
+            self.conf.log("Crypted body:\n{]".format(self.gpgm_encrypt()))
         else:
-            config.log("Not encrypting...")
+            self.conf.log("Not encrypting...")
         #TODO update body
         return Milter.ACCEPT
 
@@ -82,30 +96,32 @@ class GnupgMilter(Milter.Base):
         return Milter.CONTINUE
 
     ## === Support Functions ===
+    @staticmethod
+    def gpgm_get_factory(conf=None):
+        return functools.partial(GnupgMilter, conf=conf)
 
     @staticmethod
     def gpgm_canonical_email_address(addr):
         return addr.strip().lower()
 
-    @classmethod
-    def gpgm_get_public_key_fingerprint(cls, addr):
-        def findKey(gpg, addr):
-            for k in cls.gpgm_gpg.list_keys():
-                for uid in k['uids']:
-                    name, caddr = parseaddr(uid)
-                    if cls.gpgm_canonical_email_address(caddr) ==\
-                            cls.gpgm_canonical_email_address(addr):
-                        print("Found fingerprint")
-                        return k['fingerprint']
-            return ""
-    
-    @classmethod
-    def gpgm_encrypt(cls, data, fingerprint):
+    def gpgm_get_public_key_fingerprint(self, addr):
+        for k in self.gpgm_gpg.list_keys():
+            for uid in k['uids']:
+                name, caddr = parseaddr(uid)
+                canonical_curr = self.gpgm_canonical_email_address(caddr)
+                canonical_search = self.gpgm_canonical_email_address(addr)
+                if  canonical_curr == canonical_search:
+                    self.conf.log("Found fingerprint")
+                    return k['fingerprint']
+
+        return ""
+
+    def gpgm_encrypt(self, data, fingerprint):
         assert isinstance(data, str), "Only strings can be encrypted."
         if len(str) == 0:
             return ""
         
-        enc = cls.gpgm_gpg.encrypt(data, fingerprint)
+        enc = self.gpgm_gpg.encrypt(data, fingerprint)
         assert len(enc)>0, "Encryption failed."
         return enc
 

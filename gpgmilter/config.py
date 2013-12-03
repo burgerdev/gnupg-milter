@@ -4,8 +4,8 @@ import logging
 logger = logging.getLogger("gnupg-milter")
 logging.basicConfig()
 
-loglevel = {'DEBUG': logging.DEBUG, 'INFO': logging.INFO,
-            'WARN': logging.WARN, 'ERROR': logging.ERROR}
+from logging import DEBUG, INFO, WARN, ERROR
+loglevel = [DEBUG, INFO, WARN, ERROR]
 
 class Config(object):
     '''
@@ -25,19 +25,22 @@ class Config(object):
 
     # GPG home directory (where the key rings roam)
     #FIXME don't use temp!!!
-    gnupghome = "/tmp/gpg"
-    
+    gnupghome = "/tmp/gpgmilter"
 
-    @classmethod
-    def init_config(cls, filename):
+    def init_config(self, filename=None):
         '''
-        read the configuration file and return a Config object
+        Read the configuration file and store results in this
+         object.
+        If filename is None, the default configuration will 
+        be used.
         '''
         #TODO read real config file
         return
-    @staticmethod
-    def log(msg, level='INFO'):
+
+    def log(self, msg, level=INFO):
         #TODO implement syslog
+        #TODO static or per-object?
         assert level in loglevel, "Invalid logging level"
-        logger.log(loglevel[level], msg)
+        print("BLA")
+        logger.log(level, msg)
 

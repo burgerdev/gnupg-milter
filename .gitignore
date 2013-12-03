@@ -2,7 +2,13 @@
 
 # key files
 *.key
+*.gpg
+*.p12
+*.pfx
 !test/*.key
+
+# testing files
+test/testdir
 
 # C extensions
 *.so
